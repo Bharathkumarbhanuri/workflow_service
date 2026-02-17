@@ -29,7 +29,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         // Don't require JWT for auth endpoints or events endpoint (events is protected by API key)
-        if (path.startsWith("/api/auth") || path.startsWith("/api/events")) {
+        if (path.startsWith("/api/auth")
+                || path.startsWith("/api/events")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")) {
             filterChain.doFilter(request, response);
             return;
         }
