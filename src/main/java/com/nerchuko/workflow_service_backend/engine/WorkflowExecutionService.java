@@ -3,6 +3,7 @@ package com.nerchuko.workflow_service_backend.engine;
 import com.nerchuko.workflow_service_backend.emails.EmailRecord;
 import com.nerchuko.workflow_service_backend.emails.EmailRecordRepository;
 import com.nerchuko.workflow_service_backend.emails.EmailService;
+import com.nerchuko.workflow_service_backend.emails.EmailTemplates;
 import com.nerchuko.workflow_service_backend.events.EventRequest;
 import com.nerchuko.workflow_service_backend.notifications.Notification;
 import com.nerchuko.workflow_service_backend.notifications.NotificationRepository;
@@ -134,13 +135,6 @@ public class WorkflowExecutionService {
                 handleActionNotification(config, stepRun, run, payload);
                 return 0;
 
-            case "CONDITION":
-                return handleCondition(config, stepRun, run, payload);
-
-            case "DELAY":
-                stepRun.setOutputData("Delay of " + config.get("delayMinutes").asInt() + "minutes(not applied in v1)");
-                return 0;
-
             default:
                 throw new IllegalArgumentException("Unknow step type: " + type);
         }
@@ -156,6 +150,10 @@ public class WorkflowExecutionService {
         String to = resolveExpression(toExpression, payload);
         String subject = renderTemplate(subjectTemplate, payload);
         String body = renderTemplate(bodyTemplate, payload);
+
+        if (htmlBody) {
+            body = EmailTemplates.wrapBranded(subject, body);
+        }
 
         EmailRecord email = new EmailRecord();
         email.setToAddress(to);
@@ -196,40 +194,6 @@ public class WorkflowExecutionService {
         notificationRepository.save(notification);
 
         stepRun.setOutputData("Notification id = " + notification.getId());
-    }
-
-    private int handleCondition(JsonNode config, WorkflowStepRun stepRun, WorkflowRun run, JsonNode payload) {
-        String fieldPath = config.get("fieldPath").asText();
-        String operator = config.get("operator").asText();
-        JsonNode compareValueNode = config.get("compareValue");
-        int onFalseSkip = config.get("onFalseSkip").asInt(0);
-
-        String fieldValueStr = resolveExpression(fieldPath, payload);
-        boolean result;
-
-        // naive comparison: try number first, then string
-
-        if(compareValueNode.isNumber()){
-            double fieldVal = Double.parseDouble(fieldValueStr);
-            double compareVal = compareValueNode.asDouble();
-
-            switch (operator){
-                case ">": result = fieldVal > compareVal; break;
-                case "<": result = fieldVal < compareVal; break;
-                case "==": result = fieldVal == compareVal; break;
-                default: throw new IllegalArgumentException("Unsupported operator" + operator);
-            }
-        } else {
-            String compareVal = compareValueNode.asString();
-            switch (operator){
-                case "==": result = fieldValueStr.equals(compareVal); break;
-                default: throw new IllegalArgumentException("Unsupported operator for string" + operator);
-            }
-        }
-        stepRun.setOutputData(" condition result = " + result);
-
-        // if false, skip onFalseSkip steps; if true, skip 0
-        return result ? 0 : onFalseSkip;
     }
 
     // expression like "payload.customerEmail"

@@ -19,6 +19,7 @@ public class SwaggerConfig {
                 .group("workflow-service")
                 .packagesToScan("com.nerchuko.workflow_service_backend")
                 .pathsToMatch("/api/**")
+                .pathsToExclude("/api/events/**")
                 .build();
     }
 
