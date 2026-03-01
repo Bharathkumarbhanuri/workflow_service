@@ -2,6 +2,7 @@ package com.nerchuko.workflow_service_backend.engine;
 
 import com.nerchuko.workflow_service_backend.emails.EmailRecord;
 import com.nerchuko.workflow_service_backend.emails.EmailRecordRepository;
+import com.nerchuko.workflow_service_backend.emails.EmailService;
 import com.nerchuko.workflow_service_backend.events.EventRequest;
 import com.nerchuko.workflow_service_backend.notifications.Notification;
 import com.nerchuko.workflow_service_backend.notifications.NotificationRepository;
@@ -33,8 +34,9 @@ public class WorkflowExecutionService {
     private final EmailRecordRepository emailRecordRepository;
     private final NotificationRepository notificationRepository;
     private final ObjectMapper objectMapper;
+    private final EmailService emailService;
 
-    public WorkflowExecutionService(WorkflowRepository workflowRepository, WorkflowStepRepository stepRepository, WorkflowRunRepository runRepository, WorkflowStepRunRepository stepRunRepository, EmailRecordRepository emailRecordRepository, NotificationRepository notificationRepository, ObjectMapper objectMapper) {
+    public WorkflowExecutionService(WorkflowRepository workflowRepository, WorkflowStepRepository stepRepository, WorkflowRunRepository runRepository, WorkflowStepRunRepository stepRunRepository, EmailRecordRepository emailRecordRepository, NotificationRepository notificationRepository, ObjectMapper objectMapper, EmailService emailService) {
         this.workflowRepository = workflowRepository;
         this.stepRepository = stepRepository;
         this.runRepository = runRepository;
@@ -42,6 +44,7 @@ public class WorkflowExecutionService {
         this.emailRecordRepository = emailRecordRepository;
         this.notificationRepository = notificationRepository;
         this.objectMapper = objectMapper;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -143,10 +146,12 @@ public class WorkflowExecutionService {
         }
     }
 
-    private void handleActionEmail(JsonNode config, WorkflowStepRun stepRun, WorkflowRun run, JsonNode payload) {
+    private void handleActionEmail(JsonNode config, WorkflowStepRun stepRun, WorkflowRun run, JsonNode payload) throws Exception {
         String toExpression = config.get("toExpression").asText();
         String subjectTemplate= config.get("subjectTemplate").asText();
         String bodyTemplate= config.get("bodyTemplate").asText();
+
+        boolean htmlBody = !config.has("isHtml") || config.get("isHtml").asBoolean(true);
 
         String to = resolveExpression(toExpression, payload);
         String subject = renderTemplate(subjectTemplate, payload);
@@ -158,9 +163,26 @@ public class WorkflowExecutionService {
         email.setBody(body);
         email.setWorkflowRunId(run.getId());
         email.setStepRunId(stepRun.getId());
-        emailRecordRepository.save(email);
+        email.setStatus(EmailRecord.STATUS_PENDING);
+        email = emailRecordRepository.save(email);
 
-        stepRun.setOutputData("EmailRecord id = " + email.getId());
+        try{
+            emailService.sendEmail(to, subject, body, htmlBody);
+            email.setStatus(EmailRecord.STATUS_SENT);
+            email.setSentAt(LocalDateTime.now());
+            email.setErrorMessage(null);
+            emailRecordRepository.save(email);
+
+            stepRun.setOutputData("EmailRecord id = " + email.getId());
+        } catch (Exception ex) {
+            email.setStatus(EmailRecord.STATUS_FAILED);
+            email.setSentAt(null);
+            email.setErrorMessage(ex.getMessage());
+            emailRecordRepository.save(email);
+
+            stepRun.setOutputData("Email FAILED. EmailRecord id=" + email.getId() + ", error=" + ex.getMessage());
+            throw ex;
+        }
     }
 
     private void handleActionNotification(JsonNode config, WorkflowStepRun stepRun, WorkflowRun run, JsonNode payload) {

@@ -7,6 +7,10 @@ import java.time.LocalDateTime;
 @Entity
 public class EmailRecord {
 
+    public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_SENT = "SENT";
+    public static final String STATUS_FAILED = "FAILED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -20,10 +24,15 @@ public class EmailRecord {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String body;
 
+    // PENDING -> SENT / FAILED
     @Column(nullable = false)
-    private String status = "SENT";
+    private String status = STATUS_PENDING;
+
     private LocalDateTime createdAt = LocalDateTime.now();
-    private LocalDateTime sentAt = LocalDateTime.now();
+    private LocalDateTime sentAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
 
     private Long workflowRunId;
     private Long stepRunId;
@@ -31,8 +40,7 @@ public class EmailRecord {
     public EmailRecord() {
     }
 
-    public EmailRecord(Long workflowRunId, Long id, String toAddress, String subject, String body, String status, LocalDateTime createdAt, LocalDateTime sentAt, Long stepRunId) {
-        this.workflowRunId = workflowRunId;
+    public EmailRecord(Long id, String toAddress, String subject, String body, String status, LocalDateTime createdAt, LocalDateTime sentAt, String errorMessage, Long workflowRunId, Long stepRunId) {
         this.id = id;
         this.toAddress = toAddress;
         this.subject = subject;
@@ -40,6 +48,8 @@ public class EmailRecord {
         this.status = status;
         this.createdAt = createdAt;
         this.sentAt = sentAt;
+        this.errorMessage = errorMessage;
+        this.workflowRunId = workflowRunId;
         this.stepRunId = stepRunId;
     }
 
@@ -99,6 +109,14 @@ public class EmailRecord {
         this.sentAt = sentAt;
     }
 
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
     public Long getWorkflowRunId() {
         return workflowRunId;
     }
@@ -125,6 +143,7 @@ public class EmailRecord {
                 ", status='" + status + '\'' +
                 ", createdAt=" + createdAt +
                 ", sentAt=" + sentAt +
+                ", errorMessage='" + errorMessage + '\'' +
                 ", workflowRunId=" + workflowRunId +
                 ", stepRunId=" + stepRunId +
                 '}';
